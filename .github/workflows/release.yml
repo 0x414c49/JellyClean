@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4.1.0
+        with:
+          versionSpec: '6.x'
+
+      - name: Determine GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v4.1.0
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            TAG="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ steps.gitversion.outputs.majorMinorPatch }}"
+            TAG="v$VERSION"
+          fi
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="$VERSION.0"
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "artifact=Jellyfin.Plugin.JellyClean_$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: dotnet publish Jellyfin.Plugin.JellyClean.csproj -c Release -p:Version=${{ steps.version.outputs.version }} -o artifacts/publish
+
+      - name: Package
+        shell: bash
+        run: |
+          cd artifacts/publish
+          zip -r ../${{ steps.version.outputs.artifact }}.zip .
+          cd ..
+          md5sum ${{ steps.version.outputs.artifact }}.zip | tee ${{ steps.version.outputs.artifact }}.md5
+          sha256sum ${{ steps.version.outputs.artifact }}.zip | tee ${{ steps.version.outputs.artifact }}.sha256
+
+      - name: Update repository manifest
+        shell: pwsh
+        run: |
+          $zip = "artifacts/${{ steps.version.outputs.artifact }}.zip"
+          $md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $zip).Hash.ToLowerInvariant()
+          $url = "https://github.com/${env:GITHUB_REPOSITORY}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.version.outputs.artifact }}.zip"
+          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          ./scripts/update-manifest.ps1 -Version "${{ steps.version.outputs.version }}" -SourceUrl $url -Checksum $md5 -Timestamp $timestamp
+          cp manifest.json artifacts/manifest.json
+
+      - name: Commit updated manifest
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update manifest for ${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            artifacts/${{ steps.version.outputs.artifact }}.zip
+            artifacts/${{ steps.version.outputs.artifact }}.md5
+            artifacts/${{ steps.version.outputs.artifact }}.sha256
+            artifacts/manifest.json

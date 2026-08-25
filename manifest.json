@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "3d596b95-0c09-4a9f-8e13-3a6ef7c28920",
+    "name": "JellyClean",
+    "description": "Removes watched movies and episodes from Jellyfin using safe cleanup rules.",
+    "overview": "Automatic watched media cleanup with dry run, cron, exclusions, and metrics.",
+    "owner": "0x414c49",
+    "category": "General",
+    "versions": []
+  }
+]

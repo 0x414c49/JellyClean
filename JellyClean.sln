@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.JellyClean", "Jellyfin.Plugin.JellyClean.csproj", "{3390F3FC-F640-4A69-9E2C-E8F3AF736C5E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.JellyClean.Tests", "tests\Jellyfin.Plugin.JellyClean.Tests\Jellyfin.Plugin.JellyClean.Tests.csproj", "{CCED2742-1739-49AB-AE16-547D09D28B0C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3390F3FC-F640-4A69-9E2C-E8F3AF736C5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3390F3FC-F640-4A69-9E2C-E8F3AF736C5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3390F3FC-F640-4A69-9E2C-E8F3AF736C5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3390F3FC-F640-4A69-9E2C-E8F3AF736C5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CCED2742-1739-49AB-AE16-547D09D28B0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCED2742-1739-49AB-AE16-547D09D28B0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCED2742-1739-49AB-AE16-547D09D28B0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCED2742-1739-49AB-AE16-547D09D28B0C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

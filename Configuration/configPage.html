@@ -1,0 +1,130 @@
+<div id="JellyCleanConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+  <div data-role="content">
+    <div class="content-primary">
+      <form id="JellyCleanConfigForm">
+        <div class="verticalSection">
+          <h2>JellyClean</h2>
+          <p>Dry run is enabled by default. While dry run is enabled, JellyClean removes nothing.</p>
+        </div>
+
+        <label class="checkboxContainer">
+          <input is="emby-checkbox" type="checkbox" id="Enabled" />
+          <span>Enable cleanup</span>
+        </label>
+
+        <label class="checkboxContainer">
+          <input is="emby-checkbox" type="checkbox" id="DryRun" />
+          <span>Dry run only</span>
+        </label>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="CronExpression">Cron expression</label>
+          <input is="emby-input" id="CronExpression" type="text" />
+          <div class="fieldDescription">Standard 5-field cron in UTC, for example <code>0 3 * * *</code>.</div>
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="DaysAfterWatched">Days after watching</label>
+          <input is="emby-input" id="DaysAfterWatched" type="number" min="0" />
+        </div>
+
+        <div class="selectContainer">
+          <label class="selectLabel" for="UserMode">Watched users rule</label>
+          <select is="emby-select" id="UserMode">
+            <option value="All">All selected users watched</option>
+            <option value="Any">Any selected user watched</option>
+          </select>
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="UserIds">Selected user ids</label>
+          <input is="emby-input" id="UserIds" type="text" />
+          <div class="fieldDescription">Comma-separated Jellyfin user ids. Leave empty for all users.</div>
+        </div>
+
+        <label class="checkboxContainer">
+          <input is="emby-checkbox" type="checkbox" id="ExcludeFavorites" />
+          <span>Exclude favorites and favorite parents</span>
+        </label>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="ExclusionFragments">Exclusion fragments</label>
+          <input is="emby-input" id="ExclusionFragments" type="text" />
+          <div class="fieldDescription">Comma-separated title/path fragments that prevent deletion.</div>
+        </div>
+
+        <div class="verticalSection">
+          <h3>Metrics</h3>
+          <p id="LastRunMetrics"></p>
+          <p id="TotalMetrics"></p>
+        </div>
+
+        <button is="emby-button" type="submit" class="raised button-submit block">
+          <span>Save</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    (function () {
+      var pluginId = '3d596b95-0c09-4a9f-8e13-3a6ef7c28920';
+
+      function splitList(value) {
+        return (value || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean);
+      }
+
+      function bytes(value) {
+        var size = Number(value || 0);
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var index = 0;
+        while (size >= 1024 && index < units.length - 1) {
+          size = size / 1024;
+          index++;
+        }
+
+        return size.toFixed(index === 0 ? 0 : 2) + ' ' + units[index];
+      }
+
+      function metricsText(label, metrics) {
+        metrics = metrics || {};
+        return label + ': matched ' + (metrics.MatchedItems || 0) + ', deleted ' + (metrics.DeletedItems || 0) + ', skipped ' + (metrics.SkippedItems || 0) + ', freed ' + bytes(metrics.FreedBytes || 0);
+      }
+
+      document.querySelector('#JellyCleanConfigPage').addEventListener('pageshow', function () {
+        Dashboard.showLoadingMsg();
+        ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+          document.querySelector('#Enabled').checked = config.Enabled !== false;
+          document.querySelector('#DryRun').checked = config.DryRun !== false;
+          document.querySelector('#CronExpression').value = config.CronExpression || '0 3 * * *';
+          document.querySelector('#DaysAfterWatched').value = config.DaysAfterWatched || 7;
+          document.querySelector('#UserMode').value = config.UserMode || 'All';
+          document.querySelector('#UserIds').value = (config.UserIds || []).join(', ');
+          document.querySelector('#ExcludeFavorites').checked = config.ExcludeFavorites !== false;
+          document.querySelector('#ExclusionFragments').value = (config.ExclusionFragments || []).join(', ');
+          document.querySelector('#LastRunMetrics').textContent = metricsText('Last run', config.LastRun);
+          document.querySelector('#TotalMetrics').textContent = metricsText('Totals', config.Totals);
+          Dashboard.hideLoadingMsg();
+        });
+      });
+
+      document.querySelector('#JellyCleanConfigForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        Dashboard.showLoadingMsg();
+        ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+          config.Enabled = document.querySelector('#Enabled').checked;
+          config.DryRun = document.querySelector('#DryRun').checked;
+          config.CronExpression = document.querySelector('#CronExpression').value;
+          config.DaysAfterWatched = Number(document.querySelector('#DaysAfterWatched').value || 0);
+          config.UserMode = document.querySelector('#UserMode').value;
+          config.UserIds = splitList(document.querySelector('#UserIds').value);
+          config.ExcludeFavorites = document.querySelector('#ExcludeFavorites').checked;
+          config.ExclusionFragments = splitList(document.querySelector('#ExclusionFragments').value);
+          ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
+        });
+
+        return false;
+      });
+    })();
+  </script>
+</div>
