@@ -57,11 +57,28 @@ jobs:
       - name: Publish
         run: dotnet publish Jellyfin.Plugin.JellyClean.csproj -c Release -p:Version=${{ steps.version.outputs.version }} -o artifacts/publish
 
+      - name: Generate plugin metadata
+        shell: pwsh
+        run: |
+          $metadata = [ordered]@{
+            category = "General"
+            changelog = "See GitHub release notes."
+            description = "Removes watched movies and episodes from Jellyfin using safe cleanup rules."
+            guid = "3d596b95-0c09-4a9f-8e13-3a6ef7c28920"
+            name = "JellyClean"
+            overview = "Automatic watched media cleanup with dry run, cron, exclusions, and metrics."
+            owner = "0x414c49"
+            targetAbi = "10.11.11.0"
+            timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            version = "${{ steps.version.outputs.version }}"
+          }
+          $metadata | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath artifacts/publish/meta.json -Encoding utf8
+
       - name: Package
         shell: bash
         run: |
           cd artifacts/publish
-          zip -r ../${{ steps.version.outputs.artifact }}.zip .
+          zip ../${{ steps.version.outputs.artifact }}.zip Jellyfin.Plugin.JellyClean.dll Jellyfin.Plugin.JellyClean.xml Jellyfin.Plugin.JellyClean.pdb Cronos.dll meta.json
           cd ..
           md5sum ${{ steps.version.outputs.artifact }}.zip | tee ${{ steps.version.outputs.artifact }}.md5
           sha256sum ${{ steps.version.outputs.artifact }}.zip | tee ${{ steps.version.outputs.artifact }}.sha256
