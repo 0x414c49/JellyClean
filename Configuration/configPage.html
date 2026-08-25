@@ -270,11 +270,28 @@
       }
 
       function normalizeResponse(result) {
+        if (result && result.responseJSON) {
+          return result.responseJSON;
+        }
+
+        if (result && typeof result.responseText === 'string' && result.responseText.length) {
+          return JSON.parse(result.responseText);
+        }
+
         if (typeof result === 'string' && result.length) {
           return JSON.parse(result);
         }
 
         return result || {};
+      }
+
+      function errorMessage(error) {
+        try {
+          var response = normalizeResponse(error);
+          return field(response, 'Detail', 'detail', '') || field(response, 'Message', 'message', '') || field(response, 'title', 'title', '') || 'Check Jellyfin server logs for details.';
+        } catch (_) {
+          return 'Check Jellyfin server logs for details.';
+        }
       }
 
       function escapeHtml(value) {
@@ -425,7 +442,8 @@
         return saveCurrentSettings().then(function () {
           return ApiClient.ajax({
             type: 'POST',
-            url: ApiClient.getUrl('JellyClean/Preview')
+            url: ApiClient.getUrl('JellyClean/Preview'),
+            dataType: 'json'
           });
         }).then(normalizeResponse);
       }
@@ -504,9 +522,9 @@
         previewCleanup().then(function (result) {
           renderPreview(result);
           Dashboard.hideLoadingMsg();
-        }).catch(function () {
+        }).catch(function (error) {
           Dashboard.hideLoadingMsg();
-          Dashboard.alert('Preview failed. Check Jellyfin server logs for details.');
+          Dashboard.alert('Preview failed: ' + errorMessage(error));
         });
       });
 
@@ -530,7 +548,8 @@
           Dashboard.showLoadingMsg();
           return ApiClient.ajax({
             type: 'POST',
-            url: ApiClient.getUrl('JellyClean/CleanNow')
+            url: ApiClient.getUrl('JellyClean/CleanNow'),
+            dataType: 'json'
           }).then(normalizeResponse).then(function (cleanResult) {
             document.querySelector('#LastRunMetrics').textContent = metricsText('Last run', cleanResult);
             Dashboard.hideLoadingMsg();
@@ -538,9 +557,9 @@
           });
         }).then(function (result) {
           return result;
-        }).catch(function () {
+        }).catch(function (error) {
           Dashboard.hideLoadingMsg();
-          Dashboard.alert('Clean now failed. Check Jellyfin server logs for details.');
+          Dashboard.alert('Clean now failed: ' + errorMessage(error));
         });
       });
     })();
