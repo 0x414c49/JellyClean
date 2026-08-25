@@ -134,9 +134,21 @@
         return size.toFixed(index === 0 ? 0 : 2) + ' ' + units[index];
       }
 
+      function field(value, pascalName, camelName, fallback) {
+        if (value && value[pascalName] !== undefined) {
+          return value[pascalName];
+        }
+
+        if (value && value[camelName] !== undefined) {
+          return value[camelName];
+        }
+
+        return fallback;
+      }
+
       function metricsText(label, metrics) {
         metrics = metrics || {};
-        return label + ': matched ' + (metrics.MatchedItems || 0) + ', deleted ' + (metrics.DeletedItems || 0) + ', skipped ' + (metrics.SkippedItems || 0) + ', freed ' + bytes(metrics.FreedBytes || 0);
+        return label + ': matched ' + field(metrics, 'MatchedItems', 'matchedItems', 0) + ', deleted ' + field(metrics, 'DeletedItems', 'deletedItems', 0) + ', skipped ' + field(metrics, 'SkippedItems', 'skippedItems', 0) + ', freed ' + bytes(field(metrics, 'FreedBytes', 'freedBytes', 0));
       }
 
       function escapeHtml(value) {
@@ -153,9 +165,11 @@
         }
 
         container.innerHTML = '<ul>' + items.map(function (item) {
-          var reason = skipped && item.Reason ? ' - ' + escapeHtml(item.Reason) : '';
-          var path = item.Path ? '<br><small>' + escapeHtml(item.Path) + '</small>' : '';
-          return '<li><strong>' + escapeHtml(item.Name) + '</strong> (' + escapeHtml(item.Type) + ', ' + bytes(item.Size) + ')' + reason + path + '</li>';
+          var itemReason = field(item, 'Reason', 'reason', '');
+          var itemPath = field(item, 'Path', 'path', '');
+          var reason = skipped && itemReason ? ' - ' + escapeHtml(itemReason) : '';
+          var path = itemPath ? '<br><small>' + escapeHtml(itemPath) + '</small>' : '';
+          return '<li><strong>' + escapeHtml(field(item, 'Name', 'name', 'Unknown')) + '</strong> (' + escapeHtml(field(item, 'Type', 'type', 'Item')) + ', ' + bytes(field(item, 'Size', 'size', 0)) + ')' + reason + path + '</li>';
         }).join('') + '</ul>';
       }
 
@@ -293,8 +307,8 @@
         }).then(function (result) {
           document.querySelector('#PreviewResults').style.display = '';
           document.querySelector('#PreviewSummary').textContent = metricsText('Preview', result) + '. Showing up to 200 items in each list.';
-          setList('#PreviewDeleteList', result.WouldDelete, false);
-          setList('#PreviewSkippedList', result.Skipped, true);
+          setList('#PreviewDeleteList', field(result, 'WouldDelete', 'wouldDelete', []), false);
+          setList('#PreviewSkippedList', field(result, 'Skipped', 'skipped', []), true);
           Dashboard.hideLoadingMsg();
         }).catch(function () {
           Dashboard.hideLoadingMsg();
