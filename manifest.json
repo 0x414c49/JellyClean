@@ -8,6 +8,14 @@
   "category": "General",
   "versions": [
     {
+      "version": "1.0.3.0",
+      "changelog": "See GitHub release notes.",
+      "targetAbi": "10.11.11.0",
+      "sourceUrl": "https://github.com/0x414c49/JellyClean/releases/download/v1.0.3/Jellyfin.Plugin.JellyClean_1.0.3.0.zip",
+      "checksum": "1beb6b6de4a6bfa036dc188d53cd559d",
+      "timestamp": "2026-08-25T07:49:17Z"
+    },
+    {
       "version": "1.0.2.0",
       "changelog": "See GitHub release notes.",
       "targetAbi": "10.11.11.0",
