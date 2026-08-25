@@ -108,6 +108,10 @@
             <button is="emby-button" type="button" id="PreviewButton" class="raised block">
               <span>Preview cleanup</span>
             </button>
+            <button is="emby-button" type="button" id="CleanNowButton" class="raised block">
+              <span>Clean now</span>
+            </button>
+            <div class="fieldDescription">Clean now always previews first and asks for confirmation. If dry run is enabled, no files are deleted.</div>
           </div>
 
           <div class="verticalSection" id="PreviewResults" style="display:none;">
@@ -265,6 +269,14 @@
         return label + ': matched ' + field(metrics, 'MatchedItems', 'matchedItems', 0) + ', deleted ' + field(metrics, 'DeletedItems', 'deletedItems', 0) + ', skipped ' + field(metrics, 'SkippedItems', 'skippedItems', 0) + ', freed ' + bytes(field(metrics, 'FreedBytes', 'freedBytes', 0));
       }
 
+      function normalizeResponse(result) {
+        if (typeof result === 'string' && result.length) {
+          return JSON.parse(result);
+        }
+
+        return result || {};
+      }
+
       function escapeHtml(value) {
         return String(value || '').replace(/[&<>'"]/g, function (character) {
           return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character];
@@ -402,6 +414,29 @@
         return config;
       }
 
+      function saveCurrentSettings() {
+        return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+          configFromForm(config);
+          return ApiClient.updatePluginConfiguration(pluginId, config);
+        });
+      }
+
+      function previewCleanup() {
+        return saveCurrentSettings().then(function () {
+          return ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('JellyClean/Preview')
+          });
+        }).then(normalizeResponse);
+      }
+
+      function renderPreview(result) {
+        document.querySelector('#PreviewResults').style.display = '';
+        document.querySelector('#PreviewSummary').textContent = metricsText('Preview', result) + '. Showing up to 200 items in each list.';
+        setList('#PreviewDeleteList', field(result, 'WouldDelete', 'wouldDelete', []), false);
+        setList('#PreviewSkippedList', field(result, 'Skipped', 'skipped', []), true);
+      }
+
       function showTab(tabName) {
         document.querySelectorAll('.jellyCleanTabButton').forEach(function (button) {
           var isActive = button.getAttribute('data-tab') === tabName;
@@ -441,7 +476,7 @@
           document.querySelector('#CronExpression').value = config.CronExpression || '0 3 * * *';
           editorFromCron(config.CronExpression || '0 3 * * *');
           updateScheduleVisibility();
-          document.querySelector('#DaysAfterWatched').value = config.DaysAfterWatched || 7;
+          document.querySelector('#DaysAfterWatched').value = config.DaysAfterWatched === undefined || config.DaysAfterWatched === null ? 7 : config.DaysAfterWatched;
           document.querySelector('#UserMode').value = config.UserMode || 'All';
           document.querySelector('#UserIds').value = (config.UserIds || []).join(', ');
           document.querySelector('#ExcludeFavorites').checked = config.ExcludeFavorites !== false;
@@ -466,23 +501,46 @@
 
       document.querySelector('#PreviewButton').addEventListener('click', function () {
         Dashboard.showLoadingMsg();
-        ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-          configFromForm(config);
-          return ApiClient.updatePluginConfiguration(pluginId, config);
-        }).then(function () {
-          return ApiClient.ajax({
-            type: 'POST',
-            url: ApiClient.getUrl('JellyClean/Preview')
-          });
-        }).then(function (result) {
-          document.querySelector('#PreviewResults').style.display = '';
-          document.querySelector('#PreviewSummary').textContent = metricsText('Preview', result) + '. Showing up to 200 items in each list.';
-          setList('#PreviewDeleteList', field(result, 'WouldDelete', 'wouldDelete', []), false);
-          setList('#PreviewSkippedList', field(result, 'Skipped', 'skipped', []), true);
+        previewCleanup().then(function (result) {
+          renderPreview(result);
           Dashboard.hideLoadingMsg();
         }).catch(function () {
           Dashboard.hideLoadingMsg();
           Dashboard.alert('Preview failed. Check Jellyfin server logs for details.');
+        });
+      });
+
+      document.querySelector('#CleanNowButton').addEventListener('click', function () {
+        Dashboard.showLoadingMsg();
+        previewCleanup().then(function (result) {
+          renderPreview(result);
+          Dashboard.hideLoadingMsg();
+
+          var matched = field(result, 'MatchedItems', 'matchedItems', 0);
+          var freed = bytes(field(result, 'FreedBytes', 'freedBytes', 0));
+          var dryRun = document.querySelector('#DryRun').checked;
+          var message = dryRun
+            ? 'Dry run is enabled, so Clean now will delete nothing. Run anyway to update metrics?'
+            : 'Clean now will delete ' + matched + ' item(s) and free about ' + freed + '. Continue?';
+
+          if (!window.confirm(message)) {
+            return;
+          }
+
+          Dashboard.showLoadingMsg();
+          return ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('JellyClean/CleanNow')
+          }).then(normalizeResponse).then(function (cleanResult) {
+            document.querySelector('#LastRunMetrics').textContent = metricsText('Last run', cleanResult);
+            Dashboard.hideLoadingMsg();
+            Dashboard.alert(dryRun ? 'Dry run completed. No files were deleted.' : 'Cleanup completed.');
+          });
+        }).then(function (result) {
+          return result;
+        }).catch(function () {
+          Dashboard.hideLoadingMsg();
+          Dashboard.alert('Clean now failed. Check Jellyfin server logs for details.');
         });
       });
     })();
