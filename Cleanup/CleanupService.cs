@@ -43,17 +43,30 @@ public class CleanupService
     /// <summary>
     /// Runs cleanup once.
     /// </summary>
-    public Task<CleanupMetrics> RunAsync(PluginConfiguration config, IProgress<double> progress, CancellationToken cancellationToken)
+    public async Task<CleanupMetrics> RunAsync(PluginConfiguration config, IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        return await RunInternalAsync(config, progress, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Previews cleanup without deleting anything.
+    /// </summary>
+    public Task<CleanupPreviewResult> PreviewAsync(PluginConfiguration config, CancellationToken cancellationToken)
+    {
+        return RunInternalAsync(config, new Progress<double>(), true, cancellationToken);
+    }
+
+    private Task<CleanupPreviewResult> RunInternalAsync(PluginConfiguration config, IProgress<double> progress, bool previewOnly, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         var cutoff = now.AddDays(-Math.Max(0, config.DaysAfterWatched));
-        var metrics = new CleanupMetrics { TimestampUtc = now };
+        var result = new CleanupPreviewResult { TimestampUtc = now, DryRun = previewOnly || config.DryRun };
         var users = ResolveUsers(config).ToList();
 
         if (users.Count == 0)
         {
             _logger.LogWarning("JellyClean found no users to evaluate.");
-            return Task.FromResult(metrics);
+            return Task.FromResult(result);
         }
 
         var query = new InternalItemsQuery
@@ -73,16 +86,18 @@ public class CleanupService
 
             if (!ShouldDelete(item, users, config, cutoff, out var reason))
             {
-                metrics.SkippedItems++;
+                result.SkippedItems++;
+                AddPreviewItem(result.Skipped, item, reason, GetItemSize(item));
                 _logger.LogDebug("JellyClean skipped {ItemName}: {Reason}", item.Name, reason);
                 continue;
             }
 
-            metrics.MatchedItems++;
+            result.MatchedItems++;
             var itemSize = GetItemSize(item);
-            metrics.FreedBytes += itemSize;
+            result.FreedBytes += itemSize;
+            AddPreviewItem(result.WouldDelete, item, string.Empty, itemSize);
 
-            if (config.DryRun)
+            if (result.DryRun)
             {
                 _logger.LogInformation(
                     "JellyClean dry run would delete {ItemName} ({ItemId}), potential free {Size} bytes.",
@@ -94,10 +109,28 @@ public class CleanupService
 
             _logger.LogInformation("JellyClean deleting {ItemName} ({ItemId}).", item.Name, item.Id);
             _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true }, false);
-            metrics.DeletedItems++;
+            result.DeletedItems++;
         }
 
-        return Task.FromResult(metrics);
+        return Task.FromResult(result);
+    }
+
+    private static void AddPreviewItem(ICollection<CleanupPreviewItem> items, BaseItem item, string reason, long size)
+    {
+        if (items.Count >= 200)
+        {
+            return;
+        }
+
+        items.Add(new CleanupPreviewItem
+        {
+            Id = item.Id.ToString("N", CultureInfo.InvariantCulture),
+            Name = item.Name,
+            Type = item.GetType().Name,
+            Path = item.Path,
+            Reason = reason,
+            Size = size
+        });
     }
 
     private IEnumerable<User> ResolveUsers(PluginConfiguration config)

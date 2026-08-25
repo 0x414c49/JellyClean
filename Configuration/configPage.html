@@ -17,10 +17,49 @@
           <span>Dry run only</span>
         </label>
 
-        <div class="inputContainer">
-          <label class="inputLabel inputLabelUnfocused" for="CronExpression">Cron expression</label>
+        <button is="emby-button" type="button" id="PreviewButton" class="raised block">
+          <span>Preview dry run</span>
+        </button>
+
+        <div class="selectContainer">
+          <label class="selectLabel" for="SchedulePreset">Cleanup schedule</label>
+          <select is="emby-select" id="SchedulePreset">
+            <option value="daily">Daily</option>
+            <option value="weekdays">Weekdays</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Custom cron</option>
+          </select>
+        </div>
+
+        <div class="inputContainer" id="ScheduleTimeContainer">
+          <label class="inputLabel inputLabelUnfocused" for="ScheduleTime">Run time</label>
+          <input is="emby-input" id="ScheduleTime" type="time" />
+          <div class="fieldDescription">Time is interpreted as UTC by JellyClean.</div>
+        </div>
+
+        <div class="selectContainer" id="ScheduleDayContainer">
+          <label class="selectLabel" for="ScheduleDay">Run day</label>
+          <select is="emby-select" id="ScheduleDay">
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+            <option value="0">Sunday</option>
+          </select>
+        </div>
+
+        <div class="selectContainer" id="ScheduleMonthDayContainer">
+          <label class="selectLabel" for="ScheduleMonthDay">Day of month</label>
+          <select is="emby-select" id="ScheduleMonthDay"></select>
+        </div>
+
+        <div class="inputContainer" id="CronExpressionContainer">
+          <label class="inputLabel inputLabelUnfocused" for="CronExpression">Custom cron expression</label>
           <input is="emby-input" id="CronExpression" type="text" />
-          <div class="fieldDescription">Standard 5-field cron in UTC, for example <code>0 3 * * *</code>.</div>
+          <div class="fieldDescription">Advanced: standard 5-field cron in UTC, for example <code>0 3 * * *</code>.</div>
         </div>
 
         <div class="inputContainer">
@@ -59,6 +98,15 @@
           <p id="TotalMetrics"></p>
         </div>
 
+        <div class="verticalSection" id="PreviewResults" style="display:none;">
+          <h3>Dry Run Preview</h3>
+          <p id="PreviewSummary"></p>
+          <h4>Would clear</h4>
+          <div id="PreviewDeleteList"></div>
+          <h4>Skipped</h4>
+          <div id="PreviewSkippedList"></div>
+        </div>
+
         <button is="emby-button" type="submit" class="raised button-submit block">
           <span>Save</span>
         </button>
@@ -91,12 +139,125 @@
         return label + ': matched ' + (metrics.MatchedItems || 0) + ', deleted ' + (metrics.DeletedItems || 0) + ', skipped ' + (metrics.SkippedItems || 0) + ', freed ' + bytes(metrics.FreedBytes || 0);
       }
 
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, function (character) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character];
+        });
+      }
+
+      function setList(id, items, skipped) {
+        var container = document.querySelector(id);
+        if (!items || !items.length) {
+          container.innerHTML = '<p>None.</p>';
+          return;
+        }
+
+        container.innerHTML = '<ul>' + items.map(function (item) {
+          var reason = skipped && item.Reason ? ' - ' + escapeHtml(item.Reason) : '';
+          var path = item.Path ? '<br><small>' + escapeHtml(item.Path) + '</small>' : '';
+          return '<li><strong>' + escapeHtml(item.Name) + '</strong> (' + escapeHtml(item.Type) + ', ' + bytes(item.Size) + ')' + reason + path + '</li>';
+        }).join('') + '</ul>';
+      }
+
+      function cronFromEditor() {
+        var preset = document.querySelector('#SchedulePreset').value;
+        var parts = (document.querySelector('#ScheduleTime').value || '03:00').split(':');
+        var minute = Number(parts[1] || 0);
+        var hour = Number(parts[0] || 3);
+
+        if (preset === 'weekdays') {
+          return minute + ' ' + hour + ' * * 1-5';
+        }
+
+        if (preset === 'weekly') {
+          return minute + ' ' + hour + ' * * ' + document.querySelector('#ScheduleDay').value;
+        }
+
+        if (preset === 'monthly') {
+          return minute + ' ' + hour + ' ' + document.querySelector('#ScheduleMonthDay').value + ' * *';
+        }
+
+        if (preset === 'custom') {
+          return document.querySelector('#CronExpression').value || '0 3 * * *';
+        }
+
+        return minute + ' ' + hour + ' * * *';
+      }
+
+      function editorFromCron(cron) {
+        var match = /^([0-9]+) ([0-9]+) \* \* \*$/.exec(cron || '');
+        if (match) {
+          document.querySelector('#SchedulePreset').value = 'daily';
+          document.querySelector('#ScheduleTime').value = match[2].padStart(2, '0') + ':' + match[1].padStart(2, '0');
+          return;
+        }
+
+        match = /^([0-9]+) ([0-9]+) \* \* 1-5$/.exec(cron || '');
+        if (match) {
+          document.querySelector('#SchedulePreset').value = 'weekdays';
+          document.querySelector('#ScheduleTime').value = match[2].padStart(2, '0') + ':' + match[1].padStart(2, '0');
+          return;
+        }
+
+        match = /^([0-9]+) ([0-9]+) \* \* ([0-6])$/.exec(cron || '');
+        if (match) {
+          document.querySelector('#SchedulePreset').value = 'weekly';
+          document.querySelector('#ScheduleTime').value = match[2].padStart(2, '0') + ':' + match[1].padStart(2, '0');
+          document.querySelector('#ScheduleDay').value = match[3];
+          return;
+        }
+
+        match = /^([0-9]+) ([0-9]+) ([0-9]+) \* \*$/.exec(cron || '');
+        if (match) {
+          document.querySelector('#SchedulePreset').value = 'monthly';
+          document.querySelector('#ScheduleTime').value = match[2].padStart(2, '0') + ':' + match[1].padStart(2, '0');
+          document.querySelector('#ScheduleMonthDay').value = match[3];
+          return;
+        }
+
+        document.querySelector('#SchedulePreset').value = 'custom';
+      }
+
+      function updateScheduleVisibility() {
+        var preset = document.querySelector('#SchedulePreset').value;
+        document.querySelector('#ScheduleDayContainer').style.display = preset === 'weekly' ? '' : 'none';
+        document.querySelector('#ScheduleMonthDayContainer').style.display = preset === 'monthly' ? '' : 'none';
+        document.querySelector('#CronExpressionContainer').style.display = preset === 'custom' ? '' : 'none';
+        document.querySelector('#CronExpression').value = cronFromEditor();
+      }
+
+      function configFromForm(config) {
+        config.Enabled = document.querySelector('#Enabled').checked;
+        config.DryRun = document.querySelector('#DryRun').checked;
+        config.CronExpression = cronFromEditor();
+        config.DaysAfterWatched = Number(document.querySelector('#DaysAfterWatched').value || 0);
+        config.UserMode = document.querySelector('#UserMode').value;
+        config.UserIds = splitList(document.querySelector('#UserIds').value);
+        config.ExcludeFavorites = document.querySelector('#ExcludeFavorites').checked;
+        config.ExclusionFragments = splitList(document.querySelector('#ExclusionFragments').value);
+        return config;
+      }
+
+      for (var day = 1; day <= 28; day++) {
+        var option = document.createElement('option');
+        option.value = String(day);
+        option.textContent = String(day);
+        document.querySelector('#ScheduleMonthDay').appendChild(option);
+      }
+
+      document.querySelector('#SchedulePreset').addEventListener('change', updateScheduleVisibility);
+      document.querySelector('#ScheduleTime').addEventListener('change', updateScheduleVisibility);
+      document.querySelector('#ScheduleDay').addEventListener('change', updateScheduleVisibility);
+      document.querySelector('#ScheduleMonthDay').addEventListener('change', updateScheduleVisibility);
+
       document.querySelector('#JellyCleanConfigPage').addEventListener('pageshow', function () {
         Dashboard.showLoadingMsg();
         ApiClient.getPluginConfiguration(pluginId).then(function (config) {
           document.querySelector('#Enabled').checked = config.Enabled !== false;
           document.querySelector('#DryRun').checked = config.DryRun !== false;
           document.querySelector('#CronExpression').value = config.CronExpression || '0 3 * * *';
+          editorFromCron(config.CronExpression || '0 3 * * *');
+          updateScheduleVisibility();
           document.querySelector('#DaysAfterWatched').value = config.DaysAfterWatched || 7;
           document.querySelector('#UserMode').value = config.UserMode || 'All';
           document.querySelector('#UserIds').value = (config.UserIds || []).join(', ');
@@ -112,18 +273,33 @@
         event.preventDefault();
         Dashboard.showLoadingMsg();
         ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-          config.Enabled = document.querySelector('#Enabled').checked;
-          config.DryRun = document.querySelector('#DryRun').checked;
-          config.CronExpression = document.querySelector('#CronExpression').value;
-          config.DaysAfterWatched = Number(document.querySelector('#DaysAfterWatched').value || 0);
-          config.UserMode = document.querySelector('#UserMode').value;
-          config.UserIds = splitList(document.querySelector('#UserIds').value);
-          config.ExcludeFavorites = document.querySelector('#ExcludeFavorites').checked;
-          config.ExclusionFragments = splitList(document.querySelector('#ExclusionFragments').value);
+          configFromForm(config);
           ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
         });
 
         return false;
+      });
+
+      document.querySelector('#PreviewButton').addEventListener('click', function () {
+        Dashboard.showLoadingMsg();
+        ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+          configFromForm(config);
+          return ApiClient.updatePluginConfiguration(pluginId, config);
+        }).then(function () {
+          return ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('JellyClean/Preview')
+          });
+        }).then(function (result) {
+          document.querySelector('#PreviewResults').style.display = '';
+          document.querySelector('#PreviewSummary').textContent = metricsText('Preview', result) + '. Showing up to 200 items in each list.';
+          setList('#PreviewDeleteList', result.WouldDelete, false);
+          setList('#PreviewSkippedList', result.Skipped, true);
+          Dashboard.hideLoadingMsg();
+        }).catch(function () {
+          Dashboard.hideLoadingMsg();
+          Dashboard.alert('Preview failed. Check Jellyfin server logs for details.');
+        });
       });
     })();
   </script>

@@ -16,6 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Cronos" Version="0.11.1" />
     <PackageReference Include="Jellyfin.Controller" Version="10.11.11" ExcludeAssets="runtime" />
     <PackageReference Include="Jellyfin.Model" Version="10.11.11" ExcludeAssets="runtime" />
