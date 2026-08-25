@@ -68,12 +68,21 @@
           padding: .5rem .75rem;
         }
 
+        .jellyCleanPreviewGroup .jellyCleanPreviewGroup {
+          border-color: rgba(255, 255, 255, .08);
+          margin-left: 1rem;
+        }
+
         .jellyCleanPreviewGroup summary {
           cursor: pointer;
         }
 
         .jellyCleanPreviewGroup small {
           opacity: .72;
+        }
+
+        .jellyCleanPreviewFile {
+          margin: .35rem 0 .35rem 1.2rem;
         }
 
         .jellyCleanSettingBlock {
@@ -323,33 +332,86 @@
         return '<li><strong>' + escapeHtml(field(item, 'Name', 'name', 'Unknown')) + '</strong> (' + escapeHtml(field(item, 'Type', 'type', 'Item')) + ', ' + bytes(field(item, 'Size', 'size', 0)) + ')' + reason + path + '</li>';
       }
 
-      function pathDirectory(path) {
+      function pathParts(path) {
         path = String(path || '').replace(/\\/g, '/');
-        var index = path.lastIndexOf('/');
-        return index > 0 ? path.substring(0, index) : 'No path';
+        return path.split('/').filter(Boolean);
       }
 
-      function pathLeaf(path) {
-        var normalized = String(path || '').replace(/\\/g, '/').replace(/\/$/, '');
-        var index = normalized.lastIndexOf('/');
-        return index >= 0 ? normalized.substring(index + 1) : normalized || 'No path';
+      function categoryName(item) {
+        var type = String(field(item, 'Type', 'type', 'Item')).toLowerCase();
+        return type === 'movie' ? 'Movies' : type === 'episode' ? 'Series' : 'Items';
+      }
+
+      function displayParts(item) {
+        var parts = pathParts(field(item, 'Path', 'path', ''));
+        var fallback = field(item, 'Name', 'name', 'Unknown');
+        if (!parts.length) {
+          return [categoryName(item), fallback];
+        }
+
+        var fileName = parts[parts.length - 1] || fallback;
+        var directories = parts.slice(0, -1);
+        var type = String(field(item, 'Type', 'type', 'Item')).toLowerCase();
+
+        if (type === 'movie') {
+          return [categoryName(item)].concat(directories.slice(-1), [fileName]);
+        }
+
+        if (type === 'episode') {
+          for (var index = directories.length - 1; index >= 0; index--) {
+            if (/^(season\s*\d+|specials?)$/i.test(directories[index]) && index > 0) {
+              return [categoryName(item)].concat(directories.slice(index - 1), [fileName]);
+            }
+          }
+
+          return [categoryName(item)].concat(directories.slice(-2), [fileName]);
+        }
+
+        return [categoryName(item)].concat(directories.slice(-2), [fileName]);
+      }
+
+      function newTreeNode(name) {
+        return { name: name, count: 0, size: 0, children: {}, item: null };
+      }
+
+      function addTreeItem(root, item) {
+        var node = root;
+        var parts = displayParts(item);
+        parts.forEach(function (part, index) {
+          node.children[part] = node.children[part] || newTreeNode(part);
+          node = node.children[part];
+          node.count++;
+          node.size += Number(field(item, 'Size', 'size', 0) || 0);
+          if (index === parts.length - 1) {
+            node.item = item;
+          }
+        });
+      }
+
+      function renderTreeNode(node, skipped) {
+        var children = Object.keys(node.children).map(function (key) { return node.children[key]; }).sort(function (left, right) {
+          var leftIsFile = !Object.keys(left.children).length;
+          var rightIsFile = !Object.keys(right.children).length;
+          return leftIsFile === rightIsFile ? left.name.localeCompare(right.name) : leftIsFile - rightIsFile;
+        });
+
+        if (!children.length) {
+          var item = node.item || {};
+          var reason = skipped && field(item, 'Reason', 'reason', '') ? ' - ' + escapeHtml(field(item, 'Reason', 'reason', '')) : '';
+          return '<div class="jellyCleanPreviewFile"><strong>' + escapeHtml(node.name) + '</strong> (' + bytes(node.size) + ')' + reason + '</div>';
+        }
+
+        return '<details class="jellyCleanPreviewGroup"><summary><strong>' + escapeHtml(node.name) + '</strong> - ' + node.count + ' item(s), ' + bytes(node.size) + '</summary>' + children.map(function (child) {
+          return renderTreeNode(child, skipped);
+        }).join('') + '</details>';
       }
 
       function compactListHtml(items, skipped) {
-        var groups = {};
-        items.forEach(function (item) {
-          var directory = pathDirectory(field(item, 'Path', 'path', ''));
-          groups[directory] = groups[directory] || [];
-          groups[directory].push(item);
-        });
+        var root = newTreeNode('root');
+        items.forEach(function (item) { addTreeItem(root, item); });
 
-        return Object.keys(groups).sort(function (left, right) {
-          return groups[right].length - groups[left].length || left.localeCompare(right);
-        }).map(function (directory) {
-          var groupItems = groups[directory];
-          var groupBytes = groupItems.reduce(function (total, item) { return total + Number(field(item, 'Size', 'size', 0) || 0); }, 0);
-          var open = groupItems.length <= 5 ? ' open' : '';
-          return '<details class="jellyCleanPreviewGroup"' + open + '><summary><strong>' + escapeHtml(pathLeaf(directory)) + '</strong> - ' + groupItems.length + ' item(s), ' + bytes(groupBytes) + '<br><small>' + escapeHtml(directory) + '</small></summary><ul>' + groupItems.map(function (item) { return itemHtml(item, skipped); }).join('') + '</ul></details>';
+        return Object.keys(root.children).sort().map(function (key) {
+          return renderTreeNode(root.children[key], skipped);
         }).join('');
       }
 
