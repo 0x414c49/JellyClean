@@ -61,6 +61,21 @@
           margin-left: 1.2rem;
         }
 
+        .jellyCleanPreviewGroup {
+          border: 1px solid rgba(255, 255, 255, .12);
+          border-radius: .35rem;
+          margin: .5rem 0;
+          padding: .5rem .75rem;
+        }
+
+        .jellyCleanPreviewGroup summary {
+          cursor: pointer;
+        }
+
+        .jellyCleanPreviewGroup small {
+          opacity: .72;
+        }
+
         .jellyCleanSettingBlock {
           margin-bottom: 1.5rem;
         }
@@ -300,6 +315,44 @@
         });
       }
 
+      function itemHtml(item, skipped) {
+        var itemReason = field(item, 'Reason', 'reason', '');
+        var itemPath = field(item, 'Path', 'path', '');
+        var reason = skipped && itemReason ? ' - ' + escapeHtml(itemReason) : '';
+        var path = itemPath ? '<br><small>' + escapeHtml(itemPath) + '</small>' : '';
+        return '<li><strong>' + escapeHtml(field(item, 'Name', 'name', 'Unknown')) + '</strong> (' + escapeHtml(field(item, 'Type', 'type', 'Item')) + ', ' + bytes(field(item, 'Size', 'size', 0)) + ')' + reason + path + '</li>';
+      }
+
+      function pathDirectory(path) {
+        path = String(path || '').replace(/\\/g, '/');
+        var index = path.lastIndexOf('/');
+        return index > 0 ? path.substring(0, index) : 'No path';
+      }
+
+      function pathLeaf(path) {
+        var normalized = String(path || '').replace(/\\/g, '/').replace(/\/$/, '');
+        var index = normalized.lastIndexOf('/');
+        return index >= 0 ? normalized.substring(index + 1) : normalized || 'No path';
+      }
+
+      function compactListHtml(items, skipped) {
+        var groups = {};
+        items.forEach(function (item) {
+          var directory = pathDirectory(field(item, 'Path', 'path', ''));
+          groups[directory] = groups[directory] || [];
+          groups[directory].push(item);
+        });
+
+        return Object.keys(groups).sort(function (left, right) {
+          return groups[right].length - groups[left].length || left.localeCompare(right);
+        }).map(function (directory) {
+          var groupItems = groups[directory];
+          var groupBytes = groupItems.reduce(function (total, item) { return total + Number(field(item, 'Size', 'size', 0) || 0); }, 0);
+          var open = groupItems.length <= 5 ? ' open' : '';
+          return '<details class="jellyCleanPreviewGroup"' + open + '><summary><strong>' + escapeHtml(pathLeaf(directory)) + '</strong> - ' + groupItems.length + ' item(s), ' + bytes(groupBytes) + '<br><small>' + escapeHtml(directory) + '</small></summary><ul>' + groupItems.map(function (item) { return itemHtml(item, skipped); }).join('') + '</ul></details>';
+        }).join('');
+      }
+
       function setList(id, items, skipped) {
         var container = document.querySelector(id);
         if (!items || !items.length) {
@@ -307,13 +360,7 @@
           return;
         }
 
-        container.innerHTML = '<ul>' + items.map(function (item) {
-          var itemReason = field(item, 'Reason', 'reason', '');
-          var itemPath = field(item, 'Path', 'path', '');
-          var reason = skipped && itemReason ? ' - ' + escapeHtml(itemReason) : '';
-          var path = itemPath ? '<br><small>' + escapeHtml(itemPath) + '</small>' : '';
-          return '<li><strong>' + escapeHtml(field(item, 'Name', 'name', 'Unknown')) + '</strong> (' + escapeHtml(field(item, 'Type', 'type', 'Item')) + ', ' + bytes(field(item, 'Size', 'size', 0)) + ')' + reason + path + '</li>';
-        }).join('') + '</ul>';
+        container.innerHTML = items.length > 20 ? compactListHtml(items, skipped) : '<ul>' + items.map(function (item) { return itemHtml(item, skipped); }).join('') + '</ul>';
       }
 
       function cronFromEditor() {

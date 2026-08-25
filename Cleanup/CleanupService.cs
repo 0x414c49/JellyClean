@@ -45,7 +45,15 @@ public class CleanupService
     /// </summary>
     public async Task<CleanupMetrics> RunAsync(PluginConfiguration config, IProgress<double> progress, CancellationToken cancellationToken)
     {
-        return await RunInternalAsync(config, progress, false, cancellationToken).ConfigureAwait(false);
+        var result = await RunInternalAsync(config, progress, false, cancellationToken).ConfigureAwait(false);
+        return new CleanupMetrics
+        {
+            TimestampUtc = result.TimestampUtc,
+            MatchedItems = result.MatchedItems,
+            DeletedItems = result.DeletedItems,
+            SkippedItems = result.SkippedItems,
+            FreedBytes = result.FreedBytes
+        };
     }
 
     /// <summary>
