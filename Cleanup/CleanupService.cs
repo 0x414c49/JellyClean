@@ -151,12 +151,16 @@ public class CleanupService
 
     private bool ShouldDelete(BaseItem item, IReadOnlyCollection<User> users, PluginConfiguration config, DateTime cutoffUtc, out string reason)
     {
-        var watchedDates = users
-            .Select(user => _userDataManager.GetUserData(user, item)?.LastPlayedDate)
+        var watchStates = users
+            .Select(user =>
+            {
+                var userData = _userDataManager.GetUserData(user, item);
+                return new CleanupWatchState(userData?.Played == true, userData?.LastPlayedDate);
+            })
             .ToList();
 
         return CleanupRuleEvaluator.ShouldDelete(
-            watchedDates,
+            watchStates,
             config.UserMode,
             cutoffUtc,
             config.ExcludeFavorites && IsFavoriteForAnySelectedUser(item, users),

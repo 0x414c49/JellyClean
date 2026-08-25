@@ -14,7 +14,7 @@ public static class CleanupRuleEvaluator
     /// Decides whether an item is eligible for deletion.
     /// </summary>
     public static bool ShouldDelete(
-        IEnumerable<DateTime?> watchedDates,
+        IEnumerable<CleanupWatchState> watchStates,
         WatchedUserMode userMode,
         DateTime cutoffUtc,
         bool isFavoriteExcluded,
@@ -34,17 +34,22 @@ public static class CleanupRuleEvaluator
             return false;
         }
 
-        var dates = watchedDates.ToList();
+        var states = watchStates.ToList();
         if (userMode == WatchedUserMode.Any)
         {
-            var anyEligible = dates.Any(date => date.HasValue && date.Value.ToUniversalTime() <= cutoffUtc);
-            reason = anyEligible ? string.Empty : "no selected user watched before cutoff";
+            var anyEligible = states.Any(state => IsEligible(state, cutoffUtc));
+            reason = anyEligible ? string.Empty : "no selected user is marked played before cutoff";
             return anyEligible;
         }
 
-        var allEligible = dates.Count > 0 && dates.All(date => date.HasValue && date.Value.ToUniversalTime() <= cutoffUtc);
-        reason = allEligible ? string.Empty : "not all selected users watched before cutoff";
+        var allEligible = states.Count > 0 && states.All(state => IsEligible(state, cutoffUtc));
+        reason = allEligible ? string.Empty : "not all selected users are marked played before cutoff";
         return allEligible;
+    }
+
+    private static bool IsEligible(CleanupWatchState state, DateTime cutoffUtc)
+    {
+        return state.Played && state.LastPlayedDate.HasValue && state.LastPlayedDate.Value.ToUniversalTime() <= cutoffUtc;
     }
 
     private static bool MatchesFragment(IEnumerable<string> searchableValues, IEnumerable<string> fragments)

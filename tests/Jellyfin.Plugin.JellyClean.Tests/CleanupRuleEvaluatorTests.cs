@@ -12,7 +12,12 @@ public class CleanupRuleEvaluatorTests
     public void AnyMode_AllowsDelete_WhenOneSelectedUserWatchedBeforeCutoff()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { null, CutoffUtc.AddDays(-1), CutoffUtc.AddDays(1) },
+            new[]
+            {
+                new CleanupWatchState(false, null),
+                new CleanupWatchState(true, CutoffUtc.AddDays(-1)),
+                new CleanupWatchState(true, CutoffUtc.AddDays(1))
+            },
             WatchedUserMode.Any,
             CutoffUtc,
             false,
@@ -28,7 +33,7 @@ public class CleanupRuleEvaluatorTests
     public void AnyMode_BlocksDelete_WhenNoSelectedUserWatchedBeforeCutoff()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { null, CutoffUtc.AddSeconds(1) },
+            new[] { new CleanupWatchState(false, null), new CleanupWatchState(true, CutoffUtc.AddSeconds(1)) },
             WatchedUserMode.Any,
             CutoffUtc,
             false,
@@ -37,14 +42,14 @@ public class CleanupRuleEvaluatorTests
             out var reason);
 
         Assert.False(result);
-        Assert.Equal("no selected user watched before cutoff", reason);
+        Assert.Equal("no selected user is marked played before cutoff", reason);
     }
 
     [Fact]
     public void AllMode_AllowsDelete_WhenEverySelectedUserWatchedBeforeCutoff()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { CutoffUtc.AddDays(-2), CutoffUtc },
+            new[] { new CleanupWatchState(true, CutoffUtc.AddDays(-2)), new CleanupWatchState(true, CutoffUtc) },
             WatchedUserMode.All,
             CutoffUtc,
             false,
@@ -60,7 +65,7 @@ public class CleanupRuleEvaluatorTests
     public void AllMode_BlocksDelete_WhenOneSelectedUserHasNotWatched()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { CutoffUtc.AddDays(-2), null },
+            new[] { new CleanupWatchState(true, CutoffUtc.AddDays(-2)), new CleanupWatchState(false, null) },
             WatchedUserMode.All,
             CutoffUtc,
             false,
@@ -69,14 +74,14 @@ public class CleanupRuleEvaluatorTests
             out var reason);
 
         Assert.False(result);
-        Assert.Equal("not all selected users watched before cutoff", reason);
+        Assert.Equal("not all selected users are marked played before cutoff", reason);
     }
 
     [Fact]
     public void FavoriteExclusion_BlocksDelete_EvenWhenWatchedRuleMatches()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { CutoffUtc.AddDays(-2) },
+            new[] { new CleanupWatchState(true, CutoffUtc.AddDays(-2)) },
             WatchedUserMode.Any,
             CutoffUtc,
             true,
@@ -92,7 +97,7 @@ public class CleanupRuleEvaluatorTests
     public void FragmentExclusion_BlocksDelete_ForCaseInsensitivePathMatch()
     {
         var result = CleanupRuleEvaluator.ShouldDelete(
-            new DateTime?[] { CutoffUtc.AddDays(-2) },
+            new[] { new CleanupWatchState(true, CutoffUtc.AddDays(-2)) },
             WatchedUserMode.Any,
             CutoffUtc,
             false,
@@ -110,5 +115,21 @@ public class CleanupRuleEvaluatorTests
         var config = new PluginConfiguration();
 
         Assert.True(config.DryRun);
+    }
+
+    [Fact]
+    public void AnyMode_BlocksDelete_WhenItemHasProgressButIsNotMarkedPlayed()
+    {
+        var result = CleanupRuleEvaluator.ShouldDelete(
+            new[] { new CleanupWatchState(false, CutoffUtc.AddDays(-2)) },
+            WatchedUserMode.Any,
+            CutoffUtc,
+            false,
+            new[] { "Half watched episode" },
+            Array.Empty<string>(),
+            out var reason);
+
+        Assert.False(result);
+        Assert.Equal("no selected user is marked played before cutoff", reason);
     }
 }
