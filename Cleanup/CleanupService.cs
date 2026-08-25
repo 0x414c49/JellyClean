@@ -107,7 +107,7 @@ public class CleanupService
             .Select(id => id.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var user in _userManager.Users)
+        foreach (var user in _userManager.GetUsers())
         {
             if (configured.Count == 0 || configured.Contains(user.Id.ToString("N", CultureInfo.InvariantCulture)) || configured.Contains(user.Id.ToString()))
             {
