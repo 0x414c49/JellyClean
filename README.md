@@ -4,6 +4,8 @@ JellyClean is a Jellyfin server plugin that removes watched movies and episodes 
 
 Safety first: dry run is enabled by default. Until dry run is disabled in the plugin settings, JellyClean deletes nothing and only records what it would remove.
 
+Compatible with Jellyfin 12.
+
 ## Features
 
 - Cron-style cleanup schedule.
